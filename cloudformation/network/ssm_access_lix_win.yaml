@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  VPCCIDR:
+    Type: String
+    Default: 10.3.0.0/16
+  PrivateSubnetCIDR:
+      Type: String
+      Default: 10.3.0.0/24
+  SubnetAZ: 
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-northeast-1a
+  KeyName:
+    Type: String
+  LinuxInstanceImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  WinInstanceImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2019-Japanese-Full-Base
+  InstanceType:
+    Type: String
+    Default: t3.micro
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: test-vpc
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Ref SubnetAZ
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetCIDR
+      Tags:
+        - Key: Name
+          Value: private-a1-test-subnet
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: test-routetable
+  RouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet
+      RouteTableId: !Ref RouteTable
+# Security Group
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      VpcId: !Ref VPC
+      GroupName: instance-sg
+      GroupDescription: instance-sg
+      Tags:
+        - Key: Name
+          Value: instance-sg
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+      MaxSessionDuration: 36000
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonRedshiftFullAccess
+      Policies:
+        - PolicyName: TestLogRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: '*'
+      Path: "/"
+      RoleName: instance-test-role
+      Tags:
+        - Key: Name
+          Value: role-ec2-instance-test
+
+  IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: 
+        - !Ref EC2Role
+      Path: "/"
+
+  LinuxServer:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    Properties: 
+      AvailabilityZone: !Ref SubnetAZ
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !Ref LinuxInstanceImageId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      InstanceInitiatedShutdownBehavior: stop
+      DisableApiTermination: false
+      Monitoring: False
+      BlockDeviceMappings:    
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: 10
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeviceIndex: 0
+          SubnetId: !Ref PrivateSubnet
+          GroupSet: 
+            - !Ref SecurityGroup
+      Tags: 
+        - Key: Name
+          Value: linux-instance-test
+
+  WindowsServer:
+    Type: AWS::EC2::Instance
+    Properties:
+      AvailabilityZone: !Ref SubnetAZ
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !Ref WinInstanceImageId
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          DeviceIndex: 0
+          SubnetId: !Ref PrivateSubnet
+          GroupSet: 
+            - !Ref SecurityGroup
+      KeyName: !Ref KeyName
+      Tags:
+        - Key: Name
+          Value: win-instance-test
+
+  SSMEndpointSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupName: ssm-endpoint-sg
+      GroupDescription: ssm-endpoint-sg
+      Tags:
+        - Key: Name
+          Value: ssm-endpoint-sg
+
+  SSMEndpointSGIngress1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SSMEndpointSG
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: !Ref PrivateSubnetCIDR
+
+  SSMEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref SSMEndpointSG
+
+  EC2MessageEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2messages"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref SSMEndpointSG
+
+  # EC2Endpoint:
+  #   Type: AWS::EC2::VPCEndpoint
+  #   Properties:
+  #     ServiceName: !Sub "com.amazonaws.${AWS::Region}.ec2"
+  #     VpcEndpointType: Interface
+  #     PrivateDnsEnabled: true
+  #     VpcId: !Ref VpcId
+  #     SubnetIds:
+  #       - !Ref SubnetId
+  #     SecurityGroupIds:
+  #       - !Ref SSMEndpointSG
+
+  SSMAgentEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: !Ref VPC
+      SubnetIds:
+        - !Ref PrivateSubnet
+      SecurityGroupIds:
+        - !Ref SSMEndpointSG
+
