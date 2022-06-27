@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  ClusterIdentifier:
+    Type: String
+    Default: redshift-test
+  NodeType:
+    Type: String
+    Default: ra3.xlplus
+  MasterUsername:
+    Type: String
+  MasterUserPassword:
+    Type: String
+  DBName:
+    Type: String
+    Default: test
+  VpcId:
+    Type: String
+  SubnetId:
+    Type: String
+  SubnetAZ: 
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-northeast-1a
+  Port:
+    Type: String
+    Default: 5439
+  EnvTagName:
+    Type: String
+    Default: test
+  LocalAccessCIDR:
+    Type: String
+
+Resources:
+  S3AccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: redshift.amazonaws.com
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      MaxSessionDuration: 3600
+      Path: "/"
+      RoleName: RedshiftTestS3AccessRole
+      Tags:
+        - Key: Name
+          Value: !Sub role-redshift-${EnvTagName}
+        - Key: ENV
+          Value: !Ref EnvTagName
+
+  SubnetGroup:
+    Type: AWS::Redshift::ClusterSubnetGroup
+    Properties:
+      Description: Redshift cluster subnet group
+      SubnetIds:
+        - !Ref SubnetId
+      Tags:
+        - Key: Name
+          Value: !Sub subnet-group-${EnvTagName}
+        - Key: ENV
+          Value: !Ref EnvTagName
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      VpcId: !Ref VpcId
+      GroupName: !Sub ${AWS::StackName}-redshift-sg
+      GroupDescription: !Sub ${AWS::StackName}-redshift-sg
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref Port
+          ToPort: !Ref Port
+          CidrIp: !Ref LocalAccessCIDR
+
+  ClusterParameterGroup: 
+    Type: AWS::Redshift::ClusterParameterGroup
+    Properties: 
+      Description: 'dwh test redshift'
+      ParameterGroupFamily: "redshift-1.0"
+      Parameters: 
+        # - ParameterName: enable_user_activity_logging
+        #   ParameterValue: true
+        - ParameterName: require_ssl
+          ParameterValue: true
+
+  Cluster: 
+    Type: AWS::Redshift::Cluster
+    Properties:
+      AllowVersionUpgrade: false
+      AquaConfigurationStatus: disabled
+      AutomatedSnapshotRetentionPeriod: 1
+      AvailabilityZone: !Ref SubnetAZ
+      # AvailabilityZoneRelocation: false
+      # AvailabilityZoneRelocationStatus: String
+      Classic: false
+      ClusterIdentifier: !Ref ClusterIdentifier
+      ClusterParameterGroupName: !Ref ClusterParameterGroup
+      # ClusterSecurityGroups: 
+      #   - String
+      ClusterSubnetGroupName: !Ref SubnetGroup
+      NodeType: !Ref NodeType
+      # ClusterType: 'multi-node'
+      # NumberOfNodes: 2
+      ClusterType: 'single-node'
+      DBName: !Ref DBName
+      DeferMaintenance: false
+      # DeferMaintenanceDuration: Integer
+      # DeferMaintenanceEndTime: String
+      # DeferMaintenanceStartTime: String
+      # DestinationRegion: String
+      # ElasticIp: String
+      Encrypted: true
+      # Endpoint: 
+      #   Endpoint
+      EnhancedVpcRouting: true
+      # HsmClientCertificateIdentifier: String
+      # HsmConfigurationIdentifier: String
+      IamRoles: 
+        - !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/redshift.amazonaws.com/AWSServiceRoleForRedshift
+        - !GetAtt S3AccessRole.Arn
+      # KmsKeyId: String
+      # LoggingProperties: 
+      #   BucketName: !Ref S3LogBucket
+      #   S3KeyPrefix: !Ref S3LogBucketPrefix
+      # MaintenanceTrackName: String
+      ManualSnapshotRetentionPeriod: -1
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      # OwnerAccount: String
+      Port: !Ref Port
+      #-- JST Sun 16:00 - Sun 16:30
+      PreferredMaintenanceWindow: 'Sun:07:00-Sun:07:30'
+      PubliclyAccessible: true  # Access from IGW
+      # ResourceAction: 'pause-cluster' # Not currentry supported
+      # RevisionTarget: String
+      # RotateEncryptionKey: Boolean
+      # SnapshotClusterIdentifier: String
+      # SnapshotCopyGrantName: String
+      # SnapshotCopyManual: Boolean
+      # SnapshotCopyRetentionPeriod: Integer
+      # SnapshotIdentifier: migration-test
+      Tags: 
+        - Key: Name
+          Value: !Sub redshift-${EnvTagName}
+        - Key: ENV
+          Value: !Ref EnvTagName
+      VpcSecurityGroupIds: 
+        - !Ref SecurityGroup
+        
+Outputs:
+  ClusterIdentifier:
+    Value: !Ref ClusterIdentifier
+  Endpoint:
+    Value: !GetAtt Cluster.Endpoint.Address
+  Port:
+    Value: !GetAtt Cluster.Endpoint.Port
+  Database:
+    Value: !Ref DBName
+  Username:
+    Value: !Ref MasterUsername
