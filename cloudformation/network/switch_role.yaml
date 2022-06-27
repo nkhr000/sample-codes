@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters: 
+  TrustedAWSAccountId:
+    AllowedPattern: "^[0-9]*$"
+    Type: String
+    Description: "Trusted AWS Account ID"
+
+  IAMUserName:
+    Type: String
+    Description: "IAM Role Name"
+
+  ManagedPolicyName:
+    Type: String
+    Default: AdministratorAccess
+
+Resources:
+  IAMRoleForSwtich:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement: 
+          - Effect": Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${TrustedAWSAccountId}:user/${IAMUserName}
+            Action:
+              - sts:AssumeRole
+            Condition: 
+              Bool: 
+                aws:MultiFactorAuthPresent: true
+      ManagedPolicyArns:
+        - !Sub "arn:aws:iam::aws:policy/${ManagedPolicyName}"
+      Path: "/"
+      RoleName: !Ref IAMUserName
+
+Outputs:
+  IAMRoleArn: 
+    Value: !GetAtt IAMRoleForSwtich.Arn
+  LinkForSwitchRole:
+    Value: !Sub "https://signin.aws.amazon.com/switchrole?roleName=${IAMUserName}&account=${AWS::AccountId}"

@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  PeerVpcId:
+    Type: String
+  VpcId:
+    Type: String
+  VpcCidrBlock:
+    Type: String
+  PeerVpcCidrBlock:
+    Type: String
+  ScpRouteTableId:
+    Type: String
+  RedshiftRouteTableId:
+    Type: String
+
+# VPC Peering
+Resources:
+  VPCPeeringConnection:
+    Type: AWS::EC2::VPCPeeringConnection
+    Properties:
+      PeerVpcId: !Ref PeerVpcId
+      VpcId: !Ref VpcId
+  VpcRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ScpRouteTableId
+      DestinationCidrBlock: !Ref PeerVpcCidrBlock
+      VpcPeeringConnectionId: !Ref VPCPeeringConnection
+  VpcPeeringRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RedshiftRouteTableId
+      DestinationCidrBlock: !Ref VpcCidrBlock
+      VpcPeeringConnectionId: !Ref VPCPeeringConnection

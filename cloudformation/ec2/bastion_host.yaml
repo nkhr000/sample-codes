@@ -1,0 +1,300 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  VpcId:
+    Type: String
+  SubnetId:
+    Type: String
+  SubnetAZ: 
+    Type: AWS::EC2::AvailabilityZone::Name
+  KeyName:
+    Type: String
+  InstanceImageId:
+    Type: AWS::EC2::Image::Id
+  InstanceType:
+    Type: String
+  EnvTagName: 
+    Type: String
+  AutomationScriptTagKey:
+    Type: String
+  AutomationScriptTagValue:
+    Type: String
+  CommonSecurityGroup:
+    Type: String
+  IPforOnpremise:
+    Type: String
+    Description: ip range (/32)
+
+Mappings:
+  UserMap:
+    user1:
+      SshPublicKey: 'ssh-rsa <ssh-rsa key phrase>'
+      UserName: 'xxx'
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      VpcId: !Ref VpcId
+      GroupName: !Sub ${EnvTagName}-bastion-sg
+      GroupDescription: !Sub ${EnvTagName}-bastion-sg
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvTagName}-bastion-sg
+        - Key: ENV
+          Value: !Ref EnvTagName
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref IPforOnpremise
+        ## 共通SGからのTCP通信はすべて許可
+        - IpProtocol: tcp
+          FromPort: -1
+          ToPort: -1
+          SourceSecurityGroupId: !Ref CommonSecurityGroup
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+      MaxSessionDuration: 36000
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonRedshiftFullAccess
+      Policies:
+        - PolicyName: TestLogRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource: '*'
+      Path: "/"
+      RoleName: !Sub ${EnvTagName}-bastion-role
+      Tags:
+        - Key: Name
+          Value: !Sub role-ec2-${EnvTagName}
+        - Key: ENV
+          Value: !Ref EnvTagName
+
+  IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: 
+        - !Ref EC2Role
+      Path: "/"
+
+  CloudFormationLogs: 
+    Type: AWS::Logs::LogGroup
+    Properties: 
+      LogGroupName: TestLogs
+      RetentionInDays: 3
+
+  BastionInstance:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    CreationPolicy: 
+      ResourceSignal:
+        Timeout: PT40M
+    Properties: 
+      AvailabilityZone: !Ref SubnetAZ
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !Ref InstanceImageId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      InstanceInitiatedShutdownBehavior: stop
+      DisableApiTermination: false
+      Monitoring: False
+      BlockDeviceMappings:    
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: 100
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: "0"
+          SubnetId: !Ref SubnetId
+          GroupSet: 
+            - !Ref SecurityGroup
+            - !Ref CommonSecurityGroup
+      Tags: 
+        - Key: Name
+          Value: !Sub ${EnvTagName}-bastion
+        - Key: ENV
+          Value: !Ref EnvTagName
+        - Key: !Ref AutomationScriptTagKey
+          Value: !Ref AutomationScriptTagValue
+      UserData: 
+        Fn::Base64: !Sub 
+          - |
+            #!/bin/bash
+            yum update -y
+            echo 'update aws cli ----------------'
+            yum -y install jq gcc
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            ./aws/install
+
+            echo 'install amazon redshift rsql ----------------' 
+            yum -y install unixODBC 
+            curl "https://s3.amazonaws.com/redshift-downloads/drivers/odbc/1.4.40.1000/${ODBCFILE}" -o ./${ODBCFILE}
+            yum -y --nogpgcheck localinstall ./${ODBCFILE} 
+            echo "export ODBCINI=\$HOME/.odbc.ini" >> /etc/profile
+            echo "export ODBCSYSINI=/opt/amazon/redshiftodbc/Setup" >> /etc/profile
+            echo "export AMAZONREDSHIFTODBCINI=/opt/amazon/redshiftodbc/lib/64/amazon.redshiftodbc.ini" >> /etc/profile
+            
+            curl "https://s3.amazonaws.com/redshift-downloads/amazon-redshift-rsql/1.0.1/${RSQLFILE}" -o ./${RSQLFILE} 
+            rpm -i ./${RSQLFILE}
+
+            echo "Add Users ----------------"
+            useradd ${User1Name} 
+            cd /home/${User1Name}/
+            mkdir .ssh
+            chmod 700 .ssh
+            echo "${User1PublicKey}" > .ssh/authorized_keys
+            chmod 600 .ssh/authorized_keys
+            chown -R ${User1Name} .ssh
+            cd ~
+
+            echo "${User1Name} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/custom-users
+            chmod 400 /etc/sudoers.d/custom-users
+
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+          - {
+              RSQLFILE:         "AmazonRedshiftRsql-1.0.1-1.x86_64.rpm",
+              ODBCFILE:         "AmazonRedshiftODBC-64-bit-1.4.40.1000-1.x86_64.rpm",
+              User1Name:        !FindInMap [ UserMap, user1, UserName ],
+              User1PublicKey:   !FindInMap [ UserMap, user1, SshPublicKey ]
+            }
+    # Metadata: 
+    #   AWS::CloudFormation::Init:
+    #     configSet:
+    #       install_all: 
+    #         - install_cfn
+    #         - install_logs
+    #     install_cfn:
+    #       files:
+    #         "/etc/cfn/cfn-hup.conf":
+    #           content: !Sub | 
+    #             [main]\n
+    #             stack=${AWS::StackId}\n
+    #             region=${AWS::Region}\n
+    #           mode: 000400
+    #           owner: root
+    #           group: root
+    #         "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+    #           content: !Sub |
+    #             [cfn-auto-reloader-hook]\n
+    #             triggers=post.update\n
+    #             path=Resources.BastionInstance.Metadata.AWS::CloudFormation::Init\n
+    #             action=/opt/aws/bin/cfn-init -v 
+    #               --stack ${AWS::StackName}
+    #               --resource BastionInstance
+    #               --configsets install_all
+    #               --region ${AWS::Region}\n
+    #             runas=root\n
+    #           mode: 000400
+    #           owner: root
+    #           group: root
+    #       services:
+    #         sysvinit:
+    #           cfn-hup:
+    #             enabled: true
+    #             ensureRunning: true
+    #             files:
+    #               - /etc/cfn/cfn-hup.conf
+    #               - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+    #     install_logs:
+    #       packages:
+    #         yum:
+    #           - awslogs
+    #       files:
+    #         "/etc/awslogs/awslogs.conf":
+    #           content: !Sub |
+    #             [general]\n
+    #             state_file= /var/awslogs/state/agent-state\n
+    #             [/var/log/cloud-init.log]\n
+    #             file = /var/log/cloud-init.log\n
+    #             log_group_name = ${CloudFormationLogs}
+    #             log_stream_name = {instance_id}/cloud-init.log\n
+    #             datetime_format = \n
+    #             [/var/log/cloud-init-output.log]\n
+    #             file = /var/log/cloud-init-output.log\n
+    #             log_group_name = ${CloudFormationLogs}
+    #             log_stream_name = {instance_id}/cloud-init-output.log\n
+    #             datetime_format = \n
+    #             [/var/log/cfn-init.log]\n
+    #             file = /var/log/cfn-init.log\n
+    #             log_group_name = ${CloudFormationLogs}
+    #             log_stream_name = {instance_id}/cfn-init.log\n
+    #             datetime_format = \n
+    #             [/var/log/cfn-hup.log]\n
+    #             file = /var/log/cfn-hup.log\n
+    #             log_group_name = ${CloudFormationLogs}
+    #             log_stream_name = {instance_id}/cfn-hup.log\n
+    #             datetime_format = \n
+    #             [/var/log/cfn-wire.log]\n
+    #             file = /var/log/cfn-wire.log\n
+    #             log_group_name = ${CloudFormationLogs}
+    #             log_stream_name = {instance_id}/cfn-wire.log\n
+    #             datetime_format = \n
+    #           mode: 000444
+    #           owner: root
+    #           group: root
+    #         "/etc/awslogs/awscli.conf": 
+    #           content: !Sub |
+    #             [plugins]\n
+    #             cwlogs = cwlogs\n
+    #             [default]\n
+    #             region = ${AWS::Region}
+    #           mode: 000444
+    #           owner: root
+    #           group: root
+    #       commands:
+    #         01_create_state_directory:
+    #           command: "mkdir -p /var/awslogs/state"
+    #       services:
+    #         sysvinit:
+    #           awslogs:
+    #             enabled: true
+    #             ensureRunning: true
+    #             files:
+    #               - "/etc/awslogs/awslogs.conf"
+
+# EIP
+  EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: !Ref VpcId
+      InstanceId: !Ref BastionInstance
+      Tags:
+        - Key: Name
+          Value: !Sub eip-${EnvTagName}
+        - Key: ENV
+          Value: !Ref EnvTagName
+
+Outputs:
+  AccessIP:
+    Value: !Ref EIP
+  SshBySSMConfigurationOnLocalMachine:
+    Value: https://docs.aws.amazon.com/ja_jp/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html
+  SshUser1BySSM:
+    Value: !Sub
+      - 'ssh -i <private-key> ${User1Name}@${BastionInstance}'
+      - {
+          User1Name: !FindInMap [ UserMap, user1, UserName ]
+        }

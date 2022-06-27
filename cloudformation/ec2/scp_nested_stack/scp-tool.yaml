@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  KeyName:
+    Type: String
+  WinInstanceImageId:
+    Type: AWS::EC2::Image::Id
+  WinInstanceType:
+    Type: String
+  VpcId:
+    Type: String
+  SubnetId:
+    Type: String
+  SSHLocation:
+    Type: String
+  S3ConnectorPath:
+    Type: String
+    Default: s3://<s3bucket-path-to-jar-file>/apps/vertica-jdbc-10.1.1-0.jar
+  ScpToolLatestUrl:
+    Type: String
+    Default: https://s3.amazonaws.com/publicsctdownload/Windows/aws-schema-conversion-tool-1.0.latest.zip
+  AwsCli2Url:
+    Type: String
+    Default: https://awscli.amazonaws.com/AWSCLIV2.msi
+  SQLToolUrl:
+    Type: String
+    Default: https://github.com/sqlectron/sqlectron-gui/releases/download/v1.37.1/sqlectron-1.37.1-win.zip
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      VpcId: !Ref VpcId
+      GroupName: !Sub ${AWS::StackName}-ec2-sg
+      GroupDescription: !Sub ${AWS::StackName}-ec2-sg
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+        - IpProtocol: tcp
+          FromPort: 3389
+          ToPort: 3389
+          CidrIp: !Ref SSHLocation
+
+  SctIAMUser:
+    Type: AWS::IAM::User
+    Properties: 
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonRedshiftFullAccess
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/IAMReadOnlyAccess
+      Tags: 
+        - Key: Name
+          Value: SCT-IAM-User
+      UserName: SctIamUser
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: 'sts:AssumeRole'
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonS3FullAccess
+      MaxSessionDuration: 3600
+      Path: "/"
+      RoleName: ScpToolEC2Role
+
+  IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: 
+        - !Ref EC2Role
+      Path: "/"
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties: 
+      AvailabilityZone: ap-northeast-1a
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !Ref WinInstanceImageId
+      InstanceType: !Ref WinInstanceType
+      KeyName: !Ref KeyName
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: '0'
+          SubnetId: !Ref SubnetId
+          GroupSet: 
+            - !Ref SecurityGroup
+      Tags: 
+        - Key: Name
+          Value: !Sub ${AWS::StackName}
+      UserData:
+        Fn::Base64: !Sub |
+          <powershell>
+          mkdir C:\opt
+          cd C:\opt
+          echo "msiexec.exe /i ${AwsCli2Url}" | Out-File awscli_install_cmd.txt 
+          Invoke-WebRequest "${ScpToolLatestUrl}" -OutFile scp.zip
+          Expand-Archive scp.zip -DestinationPath scp
+          Invoke-WebRequest "${SQLToolUrl}" -OutFile sqlectron.zip
+          Expand-Archive sqlectron.zip -DestinationPath sqlectron
+          echo "aws s3 cp ${S3VerticaConnectorPath} ./" | Out-File jdbc_install_cmd.txt
+          </powershell>
+
+Outputs:
+  ScpToolAccessIP:
+    Value: !GetAtt EC2Instance.PublicIp

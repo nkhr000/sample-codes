@@ -30,7 +30,7 @@ Parameters:
     Default: ja_JP.utf8
   AirflowPort:
     Type: String
-    Default: 8080
+    Default: "8080"
   AirflowVersion:
     Type: String
     Default: 2.2.3

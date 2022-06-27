@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  S3BucketForSCP:
+    Description: S3 Bucket Name
+    Type: String
+  RedshiftVpcCidrBlock:
+    Type: String
+  RedshiftSubnetCidrBlock:
+    Type: String 
+
+Resources:
+# Create VPC
+  redshiftVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref RedshiftVpcCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: redshift
+  rsSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref redshiftVPC
+      CidrBlock: !Ref RedshiftSubnetCidrBlock
+      AvailabilityZone: ap-northeast-1a
+      Tags:
+      - Key: Name
+        Value: redshift
+  rsRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref redshiftVPC
+      Tags:
+      - Key: Name
+        Value: redshift
+  rsRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref rsSubnet
+      RouteTableId: !Ref rsRouteTable
+  rsS3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action:
+              - "s3:*"
+            Resource:
+              - !Sub "arn:aws:s3:::${S3BucketForSCP}/*"
+              - !Sub "arn:aws:s3:::${S3BucketForSCP}"
+      RouteTableIds:
+        - !Ref rsRouteTable
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref redshiftVPC
+
+
+Outputs:
+  RedshiftVpcId:
+    Value: !Ref redshiftVPC
+  RedshiftSubnetId:
+    Value: !Ref rsSubnet
+  RedshiftRouteTableId:
+    Value: !Ref rsRouteTable
