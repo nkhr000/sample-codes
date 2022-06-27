@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  PermittedUser:
+    Type: String
+    # UserではなくGroup単位で許可した方がよい
+  S3BucketName:
+    Type: String
+  ManifestPath:
+    Type: String
+    Default: manual/manifest.json
+  UserNamespace:
+    Type: String
+    Default: default
+
+Resources:
+  S3DataSource:
+      Type: AWS::QuickSight::DataSource
+      Properties:
+        Name: ManifestCfnTestDataSource
+        AwsAccountId: !Sub ${AWS::AccountId}
+        DataSourceId: cfn-unique-id-s3
+        Type: S3
+        DataSourceParameters: 
+          S3Parameters: 
+            ManifestFileLocation: 
+              Bucket: !Ref S3BucketName
+              Key: !Ref ManifestPath
+        SslProperties: 
+          DisableSsl: false
+        Permissions:
+        - Actions:
+            - quicksight:UpdateDataSourcePermissions
+            - quicksight:DescribeDataSource
+            - quicksight:DescribeDataSourcePermissions
+            - quicksight:PassDataSource
+            - quicksight:UpdateDataSource
+            - quicksight:DeleteDataSource
+          Principal: !Sub arn:aws:quicksight:${AWS::Region}:${AWS::AccountId}:user/${UserNamespace}/${PermittedUser}
+
+  # S3 DatasourceからDataSetの作成      
+  S3CsvDataSet:
+    Type: AWS::QuickSight::DataSet
+    Properties:
+      DataSetId: CsvTestDataset
+      Name: CsvTestDataset
+      AwsAccountId: !Sub ${AWS::AccountId}
+      ImportMode: SPICE
+      PhysicalTableMap: 
+        CsvTestDatasetPhysicalTableCfnTest: 
+          S3Source: 
+            DataSourceArn: !GetAtt S3DataSource.Arn
+            UploadSettings: 
+                Format: CSV
+                StartFromRow: 1
+                ContainsHeader: true
+                TextQualifier: DOUBLE_QUOTE
+                Delimiter: ","
+            InputColumns: 
+              - Name: id
+                Type: STRING
+              - Name: name1
+                Type: STRING
+              - Name: name2
+                Type: STRING
+      LogicalTableMap:
+        CsvTestDatasetLogicalTableCfnTest:
+          Alias: CsvTestDataset
+          Source:
+            PhysicalTableId: CsvTestDatasetPhysicalTableCfnTest
+          DataTransforms:
+            - CastColumnTypeOperation:
+                ColumnName: id
+                NewColumnType: INTEGER
+      Permissions:
+        - Actions:
+            - quicksight:UpdateDataSetPermissions
+            - quicksight:DescribeDataSet
+            - quicksight:DescribeDataSetPermissions
+            - quicksight:PassDataSet
+            - quicksight:DescribeIngestion
+            - quicksight:ListIngestions
+            - quicksight:UpdateDataSet
+            - quicksight:DeleteDataSet
+            - quicksight:CreateIngestion
+            - quicksight:CancelIngestion
+          Principal: !Sub arn:aws:quicksight:${AWS::Region}:${AWS::AccountId}:user/${UserNamespace}/${PermittedUser}
