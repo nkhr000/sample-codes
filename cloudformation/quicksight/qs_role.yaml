@@ -1,0 +1,43 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  S3DataBucket:
+    Type: String
+    Default: ttn-test-data
+
+Resources:
+  QuickSightRoleSample:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: quicksight.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSQuicksightAthenaAccess
+      Policies:
+        - PolicyName: QsTestS3AccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                Resource: arn:aws:s3:::*
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: 
+                  - !Sub arn:aws:s3:::${S3DataBucket}
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource: 
+                  - !Sub arn:aws:s3:::${S3DataBucket}/*
+      MaxSessionDuration: 3600
+      Path: "/"
+      RoleName: QsAnalyticsSampleRole
+
