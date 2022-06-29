@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  ExternalId:
+    Type: String
+  UserArn:
+    Type: String
+
+Resources:
+  SnowflakeIntegrationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SnowflakeIntegrationRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !Sub ${UserArn}
+            Action:
+              - sts:AssumeRole
+            Condition:
+              StringEquals: 
+                'sts:ExternalId': !Sub '${ExternalId}'
+      Path: /
+      Policies:
+        - PolicyName: SnowflakeIntegrationPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  # - s3:PutObject
+                  # - s3:DeleteObject
+                  # - s3:DeleteObjectVersion
+                Resource: 'arn:aws:s3:::<bucketname>/*'
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: 'arn:aws:s3:::<bucketname>'
+                # Condition:
+                #   StringEquals:
+                #     's3:prefix': '<prefix>/*' 
+
+Outputs:
+  RoleName:
+    Value: !Ref SnowflakeIntegrationRole
+  RoleArn:
+    Value: !GetAtt SnowflakeIntegrationRole.Arn

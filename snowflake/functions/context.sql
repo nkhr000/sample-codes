@@ -1,0 +1,12 @@
+
+-- https://docs.snowflake.com/en/sql-reference/functions-context.html
+
+SELECT CURRENT_CLIENT();
+SELECT CURRENT_ACCOUNT();
+SELECT CURRENT_ROLE();
+SELECT CURRENT_USER();
+
+SELECT LAST_QUERY_ID();
+
+SELECT CURRENT_DATABASE();
+SELECT CURRENT_SCHEMA();
