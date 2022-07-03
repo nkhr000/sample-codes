@@ -269,7 +269,7 @@ Resources:
     DeletionPolicy: Delete
     CreationPolicy: 
       ResourceSignal:
-        Timeout: P!Ref CreationTimeout
+        Timeout: !Ref CreationTimeout
     Properties: 
       AvailabilityZone: !Ref AvailabilityZone
       IamInstanceProfile: !Ref IAMInstanceProfile
