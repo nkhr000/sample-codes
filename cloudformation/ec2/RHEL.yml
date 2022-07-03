@@ -182,7 +182,7 @@ Resources:
         - Key: Name
           Value: !Sub ${TagName}-MainNode
       UserData: 
-        Fn::Base64: |
+        Fn::Base64: !Sub |
           #!/bin/bash
           echo "Update"
           yum update -y
@@ -201,12 +201,11 @@ Resources:
           ./aws/install
 
           echo "Install ssm agent"
-          REGION_NAME=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/.$//')
-          dnf install -y "https://s3.${REGION_NAME}.amazonaws.com/amazon-ssm-${REGION_NAME}/latest/linux_amd64/amazon-ssm-agent.rpm"
+          dnf install -y "https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm"
           systemctl enable amazon-ssm-agent
           systemctl start amazon-ssm-agent
 
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELinuxMainNode --region ${AWS::Region}
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELMainNode --region ${AWS::Region}
 
   RHELWorkerNode1:
     Type: AWS::EC2::Instance
@@ -240,7 +239,7 @@ Resources:
         - Key: Name
           Value: !Sub ${TagName}-WorkerNode1
       UserData: 
-        Fn::Base64: |
+        Fn::Base64: !Sub |
           #!/bin/bash
           echo "Update"
           yum update -y
@@ -259,8 +258,7 @@ Resources:
           ./aws/install
 
           echo "Install ssm agent"
-          REGION_NAME=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/.$//')
-          dnf install -y "https://s3.${REGION_NAME}.amazonaws.com/amazon-ssm-${REGION_NAME}/latest/linux_amd64/amazon-ssm-agent.rpm"
+          dnf install -y "https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm"
           systemctl enable amazon-ssm-agent
           systemctl start amazon-ssm-agent
 
@@ -271,7 +269,7 @@ Resources:
     DeletionPolicy: Delete
     CreationPolicy: 
       ResourceSignal:
-        Timeout: !Ref CreationTimeout
+        Timeout: P!Ref CreationTimeout
     Properties: 
       AvailabilityZone: !Ref AvailabilityZone
       IamInstanceProfile: !Ref IAMInstanceProfile
@@ -298,7 +296,7 @@ Resources:
         - Key: Name
           Value: !Sub ${TagName}-WorkerNode2
       UserData: 
-        Fn::Base64: |
+        Fn::Base64: !Sub |
           #!/bin/bash
           echo "Update"
           yum update -y
@@ -317,8 +315,7 @@ Resources:
           ./aws/install
 
           echo "Install ssm agent"
-          REGION_NAME=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone | sed -e 's/.$//')
-          dnf install -y "https://s3.${REGION_NAME}.amazonaws.com/amazon-ssm-${REGION_NAME}/latest/linux_amd64/amazon-ssm-agent.rpm"
+          dnf install -y "https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm"
           systemctl enable amazon-ssm-agent
           systemctl start amazon-ssm-agent
 
