@@ -29,6 +29,9 @@ Parameters:
   TagName:
     Type: String
     Default: dev
+  CreationTimeout:
+    Type: String
+    Default: PT15M
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -152,7 +155,7 @@ Resources:
     DeletionPolicy: Delete
     CreationPolicy: 
       ResourceSignal:
-        Timeout: PT10M
+        Timeout: !Ref CreationTimeout
     Properties: 
       AvailabilityZone: !Ref AvailabilityZone
       IamInstanceProfile: !Ref IAMInstanceProfile
@@ -210,7 +213,7 @@ Resources:
     DeletionPolicy: Delete
     CreationPolicy: 
       ResourceSignal:
-        Timeout: PT10M
+        Timeout: !Ref CreationTimeout
     Properties: 
       AvailabilityZone: !Ref AvailabilityZone
       IamInstanceProfile: !Ref IAMInstanceProfile
@@ -268,7 +271,7 @@ Resources:
     DeletionPolicy: Delete
     CreationPolicy: 
       ResourceSignal:
-        Timeout: PT10M
+        Timeout: !Ref CreationTimeout
     Properties: 
       AvailabilityZone: !Ref AvailabilityZone
       IamInstanceProfile: !Ref IAMInstanceProfile
