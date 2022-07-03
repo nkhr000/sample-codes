@@ -19,7 +19,7 @@ Parameters:
   EC2AMI:
     Type: AWS::EC2::Image::Id
     Default: ami-0f903fb156f24adbf
-    Description: RHE Linux AMI
+    Description: RHEL AMI
   MainNodeVolumeSize:
     Type: Number
     Default: 300
@@ -122,7 +122,7 @@ Resources:
       SourceSecurityGroupId: !GetAtt SecurityGroup.GroupId
       GroupId: !GetAtt SecurityGroup.GroupId
 
-  # RHE Linux
+  # EC2
   EC2Role:
     Type: AWS::IAM::Role
     Properties:
@@ -147,7 +147,7 @@ Resources:
         - !Ref EC2Role
       Path: "/"
 
-  RHELinuxMainNode:
+  RHELMainNode:
     Type: AWS::EC2::Instance
     DeletionPolicy: Delete
     CreationPolicy: 
@@ -205,7 +205,7 @@ Resources:
 
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELinuxMainNode --region ${AWS::Region}
 
-  RHELinuxWorkerNode1:
+  RHELWorkerNode1:
     Type: AWS::EC2::Instance
     DeletionPolicy: Delete
     CreationPolicy: 
@@ -263,7 +263,7 @@ Resources:
 
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELinuxMainNode --region ${AWS::Region}
 
-  RHELinuxWorkerNode2:
+  RHELWorkerNode2:
     Type: AWS::EC2::Instance
     DeletionPolicy: Delete
     CreationPolicy: 
