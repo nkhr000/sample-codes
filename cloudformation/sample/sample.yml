@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  S3BucketName:
+    Type: String
+  VpcCidrBlock:
+    Type: String
+    Description: "?.?.?.?/?形式の文字列"
+  SubnetCidrBlock:
+    Type: String 
+    Description: "?.?.?.?/?形式の文字列"
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+  EC2KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: "事前に作っておく"
+  EC2InstanceType:
+    Type: String
+    Default: t3a.2xlarge
+    AllowedValues:
+      - t3a.2xlarge
+      - t3.micro
+  EC2AMI:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0f903fb156f24adbf
+    Description: RHE Linux AMI
+  MainNodeCount:
+    Type: Number
+    Default: 1
+  WorkerNodeCount:
+    Type: Number
+    Default: 2
+  MainNodeVolumeSize:
+    Type: Number
+    Default: 300
+  WorkerNodeVolumeSize:
+    Type: Number
+    Default: 100
+  TageName:
+    Type: String
+    Default: dev
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Network Configuration
+        Parameters:
+          - VpcCidrBlock
+          - SubnetCidrBlock
+          - AvailabilityZone
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - EC2KeyPairName
+          - EC2InstanceType
+          - EC2AMI
+          - MainNodeCount
+          - WorkerNodeCount
+          - MainNodeVolumeSize
+          - WorkerNodeVolumeSize
+      - Label:
+          default: S3 Configuration
+        Parameters:
+          - S3BucketName
+
+Resources:
+# Network
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Sub ${TagName}-${AWS::StackName}
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref SubnetCidrBlock
+      AvailabilityZone: !Ref AvailabilityZone
+      Tags:
+      - Key: Name
+        Value: !Sub ${TagName}-${AWS::StackName}
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub ${TagName}-${AWS::StackName}
+  RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet
+      RouteTableId: !Ref RouteTable
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: ${TagName}-${AWS::StackName}
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW  
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      VpcId: !Ref VPC
+      GroupName: ${TagName}-internal-sg
+      GroupDescription: 'ec2 internal sg'
+      Tags:
+        - Key: Name
+          Value: ${TagName}-${AWS::StackName}
+
+  # RHE Linux
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+      MaxSessionDuration: 36000
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+      RoleName: ${TagName}-instance-role
+      Tags:
+        - Key: Name
+          Value: ${TagName}-instance-role
+  IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: 
+        - !Ref EC2Role
+      Path: "/"
+
+  RHELinuxMainNode:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !Ref EC2AMI
+      InstanceType: !Ref EC2InstanceType
+      KeyName: !Ref EC2KeyPairName
+      InstanceInitiatedShutdownBehavior: stop
+      DisableApiTermination: false
+      Monitoring: False
+      BlockDeviceMappings:    
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: !Ref MainNodeVolumeSize
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: 0
+          SubnetId: !Ref Subnet
+          GroupSet: 
+            - !Ref SecurityGroup
+      Tags: 
+        - Key: Name
+          Value: linux-instance-test
