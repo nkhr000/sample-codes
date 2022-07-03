@@ -184,6 +184,13 @@ Resources:
           echo "Update"
           yum update -y
 
+          echo "Setup cfn-helper"
+          yum install -y python3
+          yum install -y wget
+          mkdir -p /opt/aws/bin
+          wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+
           echo "Install AWS CLI"
           yum install zip unzip -y
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -195,6 +202,7 @@ Resources:
           dnf install -y "https://s3.${REGION_NAME}.amazonaws.com/amazon-ssm-${REGION_NAME}/latest/linux_amd64/amazon-ssm-agent.rpm"
           systemctl enable amazon-ssm-agent
           systemctl start amazon-ssm-agent
+
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELinuxMainNode --region ${AWS::Region}
 
   RHELinuxWorkerNode1:
@@ -234,6 +242,13 @@ Resources:
           echo "Update"
           yum update -y
 
+          echo "Setup cfn-helper"
+          yum install -y python3
+          yum install -y wget
+          mkdir -p /opt/aws/bin
+          wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+
           echo "Install AWS CLI"
           yum install zip unzip -y
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -245,6 +260,7 @@ Resources:
           dnf install -y "https://s3.${REGION_NAME}.amazonaws.com/amazon-ssm-${REGION_NAME}/latest/linux_amd64/amazon-ssm-agent.rpm"
           systemctl enable amazon-ssm-agent
           systemctl start amazon-ssm-agent
+
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELinuxMainNode --region ${AWS::Region}
 
   RHELinuxWorkerNode2:
@@ -284,6 +300,13 @@ Resources:
           echo "Update"
           yum update -y
 
+          echo "Setup cfn-helper"
+          yum install -y python3
+          yum install -y wget
+          mkdir -p /opt/aws/bin
+          wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+
           echo "Install AWS CLI"
           yum install zip unzip -y
           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
@@ -295,4 +318,5 @@ Resources:
           dnf install -y "https://s3.${REGION_NAME}.amazonaws.com/amazon-ssm-${REGION_NAME}/latest/linux_amd64/amazon-ssm-agent.rpm"
           systemctl enable amazon-ssm-agent
           systemctl start amazon-ssm-agent
+
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELinuxMainNode --region ${AWS::Region}
