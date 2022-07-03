@@ -163,7 +163,7 @@ Resources:
       DisableApiTermination: false
       Monitoring: False
       BlockDeviceMappings:    
-        - DeviceName: /dev/xvda
+        - DeviceName: /dev/sda1
           Ebs:
             VolumeType: gp3
             DeleteOnTermination: true
@@ -221,7 +221,7 @@ Resources:
       DisableApiTermination: false
       Monitoring: False
       BlockDeviceMappings:    
-        - DeviceName: /dev/xvda
+        - DeviceName: /dev/sda1
           Ebs:
             VolumeType: gp3
             DeleteOnTermination: true
@@ -261,7 +261,7 @@ Resources:
           systemctl enable amazon-ssm-agent
           systemctl start amazon-ssm-agent
 
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELinuxMainNode --region ${AWS::Region}
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELWorkerNode1 --region ${AWS::Region}
 
   RHELWorkerNode2:
     Type: AWS::EC2::Instance
@@ -279,7 +279,7 @@ Resources:
       DisableApiTermination: false
       Monitoring: False
       BlockDeviceMappings:    
-        - DeviceName: /dev/xvda
+        - DeviceName: /dev/sda1
           Ebs:
             VolumeType: gp3
             DeleteOnTermination: true
@@ -319,4 +319,4 @@ Resources:
           systemctl enable amazon-ssm-agent
           systemctl start amazon-ssm-agent
 
-          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELinuxMainNode --region ${AWS::Region}
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELWorkerNode2 --region ${AWS::Region}
