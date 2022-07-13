@@ -1,0 +1,7 @@
+site_name: Learn Mkdocs
+#site_url: 
+nav: 
+  - Home: index.md
+  - About: about.md
+theme: readthedocs
+

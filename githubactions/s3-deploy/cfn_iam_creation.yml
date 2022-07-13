@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  GitHubOrg:
+    Type: String
+  GithubRepositoryName:
+    Type: String
+  GithubDomain:
+    Type: String
+    Default: token.actions.githubusercontent.com
+  GithubThumbprint:
+    Type: String
+    Default: 6938fd4d98bab03faadb97b34396831e3780aea1
+  S3BucketName:
+    Type: String
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: GitHubInformation
+        Parameters:
+          - GitHubOrg
+          - GithubRepositoryName
+      - Label:
+          default: S3bucket
+        Parameters:
+          - S3BucketName
+
+Resources:
+  GithubOpenIdConnect:
+    Type: AWS::IAM::OIDCProvider
+    Properties: 
+      ClientIdList: 
+        - sts.amazonaws.com
+      Tags: 
+        - Key: Name
+          Value: GithubActions
+      ThumbprintList: 
+        - !Ref GithubActionThumbprint
+      Url: !Sub https://${GithubDomain}
+
+  IAMRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: GithubActionFederatedRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: 
+                !Ref "arn:aws:iam::${AWS::AccountId}:oidc-provider/${GithubDomain}"
+            Condition:
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${RepositoryName}:*
+      Policies:
+        - PolicyName: S3BucketAccessPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource: 
+                  - !Sub "arn:aws:s3:::${S3BucketName}/*"
+                  - !Sub "arn:aws:s3:::${S3BucketName}"
+      Path: /
+      Tags: 
+        - Key: Name
+          Value: GithubActionFederatedRole
+
+Outputs:
+  Role:
+    Value: !GetAtt IAMRole.Arn
