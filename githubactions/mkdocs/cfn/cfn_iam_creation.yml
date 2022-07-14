@@ -37,7 +37,7 @@ Resources:
         - Key: Name
           Value: GithubActions
       ThumbprintList: 
-        - !Ref GithubActionThumbprint
+        - !Ref GithubThumbprint
       Url: !Sub https://${GithubDomain}
 
   IAMRole:
@@ -50,10 +50,10 @@ Resources:
             Action: sts:AssumeRoleWithWebIdentity
             Principal:
               Federated: 
-                !Ref "arn:aws:iam::${AWS::AccountId}:oidc-provider/${GithubDomain}"
+                !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/${GithubDomain}"
             Condition:
               StringLike:
-                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${RepositoryName}:*
+                token.actions.githubusercontent.com:sub: !Sub repo:${GitHubOrg}/${GithubRepositoryName}:*
       Policies:
         - PolicyName: S3BucketAccessPolicy
           PolicyDocument:
