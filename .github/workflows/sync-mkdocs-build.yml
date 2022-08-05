@@ -2,9 +2,7 @@ name: Sync Mkdocs build to S3
 
 on: workflow_dispatch
 env:
-  BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
-  AWS_REGION: "ap-northeast-1"
-  AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+  WORKDIR: ''
 permissions:
   id-token: write
   contents: read

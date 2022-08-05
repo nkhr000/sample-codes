@@ -66,5 +66,5 @@ Environmentでは以下の4つを指定可能
   - https://github.com/actions/checkout
 - aws-actions/configure-aws-credentials
   - https://github.com/aws-actions/configure-aws-credentials
-- actions/setup-python@v3
+- actions/setup-python
   - https://github.com/actions/setup-python
