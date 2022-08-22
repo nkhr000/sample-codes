@@ -1,14 +1,21 @@
 import json
-from datetime import datetime
-import time
 import random
 import boto3
 import sys
+from datetime import datetime
+from dateutil import tz
  
 client = boto3.client('firehose')
 
 def put_records(stream, count):
 
+    JST = tz.gettz('Asia/Tokyo')
+    UTC = tz.gettz("UTC")
+    now = datetime.now(tz=UTC)
+    jst_now = now.astimezone(JST)
+    print(now)
+    print(jst_now)
+    
     for num in range(count):
         event = {}
         keylist = ['A1', 'A2', 'B1', 'B2', 'B3', 'C1']
@@ -20,10 +27,11 @@ def put_records(stream, count):
         event['number']['type'] = 'IntegerType'
         event['number']['value'] = num
         event['list'] = datalist
-        now = time.time()
-        event[u'event_time'] = datetime.utcfromtimestamp(now).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+        event['jst_datetime'] = jst_now.strftime('%Y-%m-%dT%H:%M:%S')
+        event['jst_timestamp'] = int(jst_now.timestamp()) # epoch timestamp
         event_record = json.dumps(event)
     
+        print(event_record)
         client.put_record(DeliveryStreamName=stream, Record={'Data': event_record})
  
 
