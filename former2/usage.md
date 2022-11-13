@@ -2,7 +2,39 @@
 
 作成済みのAWSリソースからCloudformationコードを生成してくれるサービス  
 ローカルのDockerでも実行可能
- 
+
+### 事前準備
+
+1. Dockerのインストール
+
+```
+sudo apt update
+sudo apt install apt-transport-https ca-certificates curl software-properties-common
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
+sudo apt update
+sudo apt install docker-ce
+sudo apt install docker-compose
+
+
+sudo usermod -aG docker $USER
+sudo visudo
+<末尾に追加>
+%docker ALL=(ALL)  NOPASSWD: /usr/sbin/service docker start
+
+vim ~/.bashrc
+<末尾に追加>
+if [ $(service docker status | awk '{print $4}') = "not" ]; then
+  sudo service docker start > /dev/null
+fi
+
+<powershell側で実行>
+wsl --shutdown
+<wsl:ubuntu側で実行>
+sudo service docker status
+
+sudo apt install awscli
+```
   
 ### 実行手順
 
