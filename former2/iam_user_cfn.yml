@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters: 
+  IAMUserName:
+    Type: String
+    Description: "IAM User Name"
+
+Resources:
+  IAMUser:
+    Type: AWS::IAM::User
+    Properties: 
+      UserName: !Ref IAMUserName
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+  
+Outputs:
+  IAMUserArn: 
+    Value: !GetAtt IAMUser.Arn

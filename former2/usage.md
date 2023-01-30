@@ -49,6 +49,10 @@ git clone https://github.com/iann0036/former2
 ```
 cd former2
 docker-compose up -d
+
+## 止めて削除するとき（docker-compose.yamlファイルの定義でcontainer_name="former2"と設定している場合）
+docker stop $(docker ps -aq --filter "name=former2")
+docker rm $(docker ps -aq --filter "name=former2")
 ```
 
 3. Switch Roleを利用している場合はAssume Roleコマンドで一時クレデンシャルを取得
