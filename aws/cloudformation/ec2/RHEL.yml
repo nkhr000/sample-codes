@@ -1,0 +1,322 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  VpcCidrBlock:
+    Type: String
+    Default: 10.5.0.0/16
+  SubnetCidrBlock:
+    Type: String 
+    Default: 10.5.0.0/24
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+  EC2KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+  EC2InstanceType:
+    Type: String
+    Default: t3a.2xlarge
+    AllowedValues:
+      - t3a.2xlarge
+      - t3.micro
+  EC2AMI:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0f903fb156f24adbf
+    Description: RHEL AMI
+  MainNodeVolumeSize:
+    Type: Number
+    Default: 300
+  WorkerNodeVolumeSize:
+    Type: Number
+    Default: 100
+  TagName:
+    Type: String
+    Default: dev
+  CreationTimeout:
+    Type: String
+    Default: PT15M
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Network Configuration
+        Parameters:
+          - VpcCidrBlock
+          - SubnetCidrBlock
+          - AvailabilityZone
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - EC2KeyPairName
+          - EC2InstanceType
+          - EC2AMI
+          - MainNodeVolumeSize
+          - WorkerNodeVolumeSize
+
+Resources:
+# Network
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidrBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Sub ${TagName}-${AWS::StackName}
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref SubnetCidrBlock
+      AvailabilityZone: !Ref AvailabilityZone
+      Tags:
+      - Key: Name
+        Value: !Sub ${TagName}-${AWS::StackName}
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Sub ${TagName}-${AWS::StackName}
+  RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref Subnet
+      RouteTableId: !Ref RouteTable
+  IGW:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${TagName}-IGW
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref IGW  
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref IGW
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      VpcId: !Ref VPC
+      GroupName: !Sub ${TagName}-internal-sg
+      GroupDescription: 'ec2 internal sg'
+      Tags:
+        - Key: Name
+          Value: !Sub ${TagName}-${AWS::StackName}
+  # Outbountは0.0.0.0/0のALL許可  
+  OutboundRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      IpProtocol: '-1'
+      CidrIp: 0.0.0.0/0
+      GroupId: !GetAtt SecurityGroup.GroupId
+  InboundRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: '-1'
+      # 同じSGを持つ場合は全ての通信を許可　　
+      SourceSecurityGroupId: !GetAtt SecurityGroup.GroupId
+      GroupId: !GetAtt SecurityGroup.GroupId
+
+  # EC2
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+      MaxSessionDuration: 36000
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: "/"
+      RoleName: !Sub ${TagName}-instance-role
+      Tags:
+        - Key: Name
+          Value: !Sub ${TagName}-instance-role
+  IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: 
+        - !Ref EC2Role
+      Path: "/"
+
+  RHELMainNode:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    CreationPolicy: 
+      ResourceSignal:
+        Timeout: !Ref CreationTimeout
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !Ref EC2AMI
+      InstanceType: !Ref EC2InstanceType
+      KeyName: !Ref EC2KeyPairName
+      InstanceInitiatedShutdownBehavior: stop
+      DisableApiTermination: false
+      Monitoring: False
+      BlockDeviceMappings:    
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: !Ref MainNodeVolumeSize
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: '0'
+          SubnetId: !Ref Subnet
+          GroupSet: 
+            - !Ref SecurityGroup
+      Tags: 
+        - Key: Name
+          Value: !Sub ${TagName}-MainNode
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo "Update"
+          yum update -y
+
+          echo "Setup cfn-helper"
+          yum install -y python3
+          yum install -y wget
+          mkdir -p /opt/aws/bin
+          wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+
+          echo "Install AWS CLI"
+          yum install zip unzip -y
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          ./aws/install
+
+          echo "Install ssm agent"
+          dnf install -y "https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm"
+          systemctl enable amazon-ssm-agent
+          systemctl start amazon-ssm-agent
+
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELMainNode --region ${AWS::Region}
+
+  RHELWorkerNode1:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    CreationPolicy: 
+      ResourceSignal:
+        Timeout: !Ref CreationTimeout
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !Ref EC2AMI
+      InstanceType: !Ref EC2InstanceType
+      KeyName: !Ref EC2KeyPairName
+      InstanceInitiatedShutdownBehavior: stop
+      DisableApiTermination: false
+      Monitoring: False
+      BlockDeviceMappings:    
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: !Ref WorkerNodeVolumeSize
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: '0'
+          SubnetId: !Ref Subnet
+          GroupSet: 
+            - !Ref SecurityGroup
+      Tags: 
+        - Key: Name
+          Value: !Sub ${TagName}-WorkerNode1
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo "Update"
+          yum update -y
+
+          echo "Setup cfn-helper"
+          yum install -y python3
+          yum install -y wget
+          mkdir -p /opt/aws/bin
+          wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+
+          echo "Install AWS CLI"
+          yum install zip unzip -y
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          ./aws/install
+
+          echo "Install ssm agent"
+          dnf install -y "https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm"
+          systemctl enable amazon-ssm-agent
+          systemctl start amazon-ssm-agent
+
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELWorkerNode1 --region ${AWS::Region}
+
+  RHELWorkerNode2:
+    Type: AWS::EC2::Instance
+    DeletionPolicy: Delete
+    CreationPolicy: 
+      ResourceSignal:
+        Timeout: !Ref CreationTimeout
+    Properties: 
+      AvailabilityZone: !Ref AvailabilityZone
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !Ref EC2AMI
+      InstanceType: !Ref EC2InstanceType
+      KeyName: !Ref EC2KeyPairName
+      InstanceInitiatedShutdownBehavior: stop
+      DisableApiTermination: false
+      Monitoring: False
+      BlockDeviceMappings:    
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+            VolumeSize: !Ref WorkerNodeVolumeSize
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: '0'
+          SubnetId: !Ref Subnet
+          GroupSet: 
+            - !Ref SecurityGroup
+      Tags: 
+        - Key: Name
+          Value: !Sub ${TagName}-WorkerNode2
+      UserData: 
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          echo "Update"
+          yum update -y
+
+          echo "Setup cfn-helper"
+          yum install -y python3
+          yum install -y wget
+          mkdir -p /opt/aws/bin
+          wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-py3-latest.tar.gz
+          python3 -m easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-py3-latest.tar.gz
+
+          echo "Install AWS CLI"
+          yum install zip unzip -y
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          ./aws/install
+
+          echo "Install ssm agent"
+          dnf install -y "https://s3.${AWS::Region}.amazonaws.com/amazon-ssm-${AWS::Region}/latest/linux_amd64/amazon-ssm-agent.rpm"
+          systemctl enable amazon-ssm-agent
+          systemctl start amazon-ssm-agent
+
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource RHELWorkerNode2 --region ${AWS::Region}

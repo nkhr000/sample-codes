@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  dbname:
+    Type: String
+    Default: cmtest
+
+Resources:
+  GlueTable:
+    Type: AWS::Glue::Table
+    Properties: 
+      ## CatalogIdは任意の文字列が設定可能、デフォルトはAccountIDが利用される
+      CatalogId: !Sub ${AWS::AccountId}
+      DatabaseName: !Ref dbname
+      TableInput: 
+        Description: "Cloudformationから作成されたテーブルの備考です。サンプルデータになります。"
+        Name: testcfntable
+        TableType: EXTERNAL_TABLE
+        Parameters:
+          Classification: csv
+        StorageDescriptor: 
+          # BucketColumns: 
+          #   - String
+          Columns: 
+            - Name: id
+              Type: Integer
+              Comment: カラムコメント１
+            - Name: name
+              Type: String
+              Comment: カラムコメント2
+            - Name: value
+              Type: String
+              Comment: カラムコメント3
+          Compressed: false
+          InputFormat: org.apache.hadoop.mapred.TextInputFormat
+          Location: s3://moanalysis-dev-tmp-cm-sample/manual/
+          NumberOfBuckets: 0
+          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+          # Parameters: Json
+          # SchemaReference: 
+          #   SchemaReference
+          SerdeInfo: 
+            # Name: ""
+            SerializationLibrary: org.apache.hadoop.hive.serde2.OpenCSVSerde
+            Parameters: 
+              SeparatorChar": ","
+          # SkewedInfo: 
+          #   SkewedInfo
+          # SortColumns: 
+          #   - Order
+          # StoredAsSubDirectories: Boolean
+        # Owner: String
+        # PartitionKeys: 
+        #   - Column
+        # Retention: Integer
+        # TargetTable: 
+        #   TableIdentifier
+        # ViewExpandedText: String
+        # ViewOriginalText: String
+
+
